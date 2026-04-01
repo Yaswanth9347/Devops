@@ -56,11 +56,18 @@ def process_deployment(deployment_id: int):
                 deployment.build_status = "building"
                 db.commit()
 
-                tag = build_image(path, deployment.id)
-                deployment.image_tag = tag
-
-                deployment.build_status = "built"
-                db.commit()
+                try:
+                    tag, logs = build_image(path, deployment.id)
+                    deployment.image_tag = tag
+                    deployment.build_logs = logs
+                    deployment.build_status = "built"
+                    db.commit()
+                except Exception as build_error:
+                    deployment.status = "failed"
+                    deployment.build_status = "failed"
+                    deployment.build_logs = str(build_error)
+                    db.commit()
+                    return
             else:
                 deployment.status = "failed"
                 deployment.build_status = "no_dockerfile"

@@ -293,6 +293,29 @@ def deployment_logs(
     logs = get_container_logs(deployment.container_id)
     return {"logs": logs}
 
+@app.get("/deployments/{deployment_id}/build-logs")
+def build_logs(
+    deployment_id: int,
+    user_id: int = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    deployment = crud.get_deployment(db, deployment_id)
+    if not deployment:
+        raise HTTPException(status_code=404, detail="Deployment not found")
+
+    project = db.query(models.Project).filter(
+        models.Project.id == deployment.project_id,
+        models.Project.owner_id == user_id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    return {
+        "build_status": deployment.build_status,
+        "logs": deployment.build_logs
+    }
+
 @app.get("/deployments/{deployment_id}/details")
 def deployment_details(
     deployment_id: int,
