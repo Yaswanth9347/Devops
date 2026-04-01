@@ -43,6 +43,8 @@ class Deployment(Base):
     version = Column(Integer, nullable=True)
     is_active = Column(Boolean, default=False)
     source_path = Column(String, nullable=True)
+    image_tag = Column(String, nullable=True)
+    build_logs = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     project = relationship("Project")

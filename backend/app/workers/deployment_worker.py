@@ -7,6 +7,7 @@ from ..build_manager import get_runtime_image
 from ..env_manager import parse_env_string
 from ..crud import deactivate_project_deployments
 from ..git_manager import clone_repo
+from ..docker_builder import build_image, has_dockerfile
 
 def process_deployment(deployment_id: int):
     db = SessionLocal()
@@ -50,6 +51,24 @@ def process_deployment(deployment_id: int):
 
             deployment.build_status = "cloned"
             db.commit()
+
+            if has_dockerfile(path):
+                deployment.build_status = "building"
+                db.commit()
+
+                tag = build_image(path, deployment.id)
+                deployment.image_tag = tag
+
+                deployment.build_status = "built"
+                db.commit()
+            else:
+                deployment.status = "failed"
+                deployment.build_status = "no_dockerfile"
+                db.commit()
+                return
+
+        if deployment.image_tag:
+            image = deployment.image_tag
 
         container = client.containers.run(
             image,
