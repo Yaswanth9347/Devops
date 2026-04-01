@@ -2,9 +2,10 @@ from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from .database import engine, Base, get_db
 from . import models, schemas, crud, utils, auth
+from .cleanup_manager import cleanup_deployment
 from .workers.queue import deployment_queue
 from .workers.deployment_worker import process_deployment
-from .docker_manager import stop_container, start_container, container_status, get_container_logs
+from .docker_manager import stop_container, start_container, container_status, get_container_logs, container_details
 
 app = FastAPI()
 
@@ -190,6 +191,34 @@ def list_deployments(
         project_id
     )
 
+@app.get("/projects/{project_id}/deployments/summary")
+def project_macro_summary(
+    project_id: int,
+    user_id: int = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    project = db.query(models.Project).filter(
+        models.Project.id == project_id,
+        models.Project.owner_id == user_id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    deployments = crud.get_project_deployments(db, project_id)
+    
+    summary = []
+    for d in deployments:
+        summary.append({
+            "id": d.id,
+            "version": d.version,
+            "status": d.status,
+            "is_active": d.is_active,
+            "url": d.url
+        })
+        
+    return summary
+
 @app.post("/deployments/{deployment_id}/stop")
 def stop_deployment(
     deployment_id: int,
@@ -334,17 +363,53 @@ def deployment_details(
     if not project:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    logs = "No container assigned"
+    runtime_logs = "No container assigned"
+    container_info = None
+
     if deployment.container_id:
-        status = container_status(deployment.container_id)
-        if status != "not_found":
-            deployment.status = status
+        runtime_logs = get_container_logs(deployment.container_id)
+        container_info = container_details(deployment.container_id)
+        
+        if container_info:
+            deployment.status = container_info["status"]
             db.commit()
-        logs = get_container_logs(deployment.container_id)
 
     return {
+        "id": deployment.id,
+        "project_id": deployment.project_id,
+        "version": deployment.version,
         "status": deployment.status,
+        "build_status": deployment.build_status,
+        "runtime": deployment.runtime,
+        "image": deployment.image_tag,
         "url": deployment.url,
         "port": deployment.port,
-        "logs": logs
+        "is_active": deployment.is_active,
+        "build_logs": deployment.build_logs,
+        "runtime_logs": runtime_logs,
+        "container": container_info
     }
+
+@app.delete("/deployments/{deployment_id}")
+def delete_deployment(
+    deployment_id: int,
+    user_id: int = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    deployment = crud.get_deployment(db, deployment_id)
+    if not deployment:
+        raise HTTPException(status_code=404, detail="Deployment not found")
+
+    project = db.query(models.Project).filter(
+        models.Project.id == deployment.project_id,
+        models.Project.owner_id == user_id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    cleanup_deployment(deployment)
+    db.delete(deployment)
+    db.commit()
+
+    return {"message": "Deployment removed"}

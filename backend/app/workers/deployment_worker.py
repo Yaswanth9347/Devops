@@ -8,6 +8,7 @@ from ..env_manager import parse_env_string
 from ..crud import deactivate_project_deployments
 from ..git_manager import clone_repo
 from ..docker_builder import build_image, has_dockerfile
+from ..docker_manager import remove_container
 
 def process_deployment(deployment_id: int):
     db = SessionLocal()
@@ -99,6 +100,16 @@ def process_deployment(deployment_id: int):
         # Deactivate previous deployments and mark the new one active
         deactivate_project_deployments(db, deployment.project_id)
         deployment.is_active = True
+
+        old_deployments = db.query(models.Deployment).filter(
+            models.Deployment.project_id == deployment.project_id,
+            models.Deployment.id != deployment.id
+        ).all()
+
+        for old in old_deployments:
+            if old.container_id:
+                remove_container(old.container_id)
+                old.status = "stopped"
         
     except Exception as e:
         print(f"Docker execution failed: {e}")
