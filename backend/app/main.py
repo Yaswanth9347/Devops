@@ -4,7 +4,7 @@ from .database import engine, Base, get_db
 from . import models, schemas, crud, utils, auth
 from .workers.queue import deployment_queue
 from .workers.deployment_worker import process_deployment
-from .docker_manager import stop_container, start_container, container_status
+from .docker_manager import stop_container, start_container, container_status, get_container_logs
 
 app = FastAPI()
 
@@ -72,6 +72,45 @@ def list_projects(
 ):
     return crud.get_user_projects(db, user_id)
 
+@app.put("/projects/{project_id}/source", response_model=schemas.ProjectResponse)
+def update_source(
+    project_id: int,
+    data: schemas.ProjectSourceUpdate,
+    user_id: int = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    project = db.query(models.Project).filter(
+        models.Project.id == project_id,
+        models.Project.owner_id == user_id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    return crud.update_project_source(
+        db, project_id, data.repo_url, data.branch, data.build_path
+    )
+
+@app.get("/projects/{project_id}/source")
+def view_source(
+    project_id: int,
+    user_id: int = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    project = db.query(models.Project).filter(
+        models.Project.id == project_id,
+        models.Project.owner_id == user_id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    return {
+        "repo_url": project.repo_url,
+        "branch": project.branch,
+        "build_path": project.build_path
+    }
+
 @app.post("/deployments", response_model=schemas.DeploymentResponse)
 def create_deployment(
     deployment: schemas.DeploymentCreate,
@@ -92,7 +131,9 @@ def create_deployment(
     deployment_record = crud.create_deployment(
         db,
         deployment.project_id,
-        deployment.commit_hash
+        deployment.commit_hash,
+        deployment.runtime,
+        deployment.env_vars
     )
     
     deployment_queue.enqueue(
@@ -101,6 +142,31 @@ def create_deployment(
     )
 
     return deployment_record
+
+@app.post("/deployments/{deployment_id}/redeploy", response_model=schemas.DeploymentResponse)
+def redeploy(
+    deployment_id: int,
+    user_id: int = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    old = crud.get_deployment(db, deployment_id)
+    if not old:
+        raise HTTPException(status_code=404, detail="Deployment not found")
+        
+    new = crud.create_deployment(
+        db,
+        old.project_id,
+        old.commit_hash,
+        old.runtime,
+        old.env_vars
+    )
+    
+    deployment_queue.enqueue(
+        process_deployment,
+        new.id
+    )
+    
+    return new
 
 @app.get("/projects/{project_id}/deployments", response_model=list[schemas.DeploymentResponse])
 def list_deployments(
@@ -202,3 +268,60 @@ def get_deployment_status(
             db.commit()
             
     return {"status": deployment.status}
+
+@app.get("/deployments/{deployment_id}/logs")
+def deployment_logs(
+    deployment_id: int,
+    user_id: int = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    deployment = crud.get_deployment(db, deployment_id)
+    if not deployment:
+        raise HTTPException(status_code=404, detail="Deployment not found")
+
+    project = db.query(models.Project).filter(
+        models.Project.id == deployment.project_id,
+        models.Project.owner_id == user_id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if not deployment.container_id:
+        return {"logs": "Container not initialized"}
+
+    logs = get_container_logs(deployment.container_id)
+    return {"logs": logs}
+
+@app.get("/deployments/{deployment_id}/details")
+def deployment_details(
+    deployment_id: int,
+    user_id: int = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    deployment = crud.get_deployment(db, deployment_id)
+    if not deployment:
+        raise HTTPException(status_code=404, detail="Deployment not found")
+
+    project = db.query(models.Project).filter(
+        models.Project.id == deployment.project_id,
+        models.Project.owner_id == user_id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    logs = "No container assigned"
+    if deployment.container_id:
+        status = container_status(deployment.container_id)
+        if status != "not_found":
+            deployment.status = status
+            db.commit()
+        logs = get_container_logs(deployment.container_id)
+
+    return {
+        "status": deployment.status,
+        "url": deployment.url,
+        "port": deployment.port,
+        "logs": logs
+    }

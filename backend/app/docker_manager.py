@@ -21,3 +21,11 @@ def container_status(container_id: str) -> str:
         return container.status
     except docker.errors.NotFound:
         return "not_found"
+
+def get_container_logs(container_id: str) -> str:
+    try:
+        container = client.containers.get(container_id)
+        logs = container.logs(tail=100)
+        return logs.decode('utf-8')
+    except Exception as e:
+        return "No logs available"
