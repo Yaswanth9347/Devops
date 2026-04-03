@@ -1,16 +1,32 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from .database import engine, Base, get_db
-from . import models, schemas, crud, utils, auth
-from .cleanup_manager import cleanup_deployment
-from .health_manager import check_service_health
-from .workers.queue import deployment_queue
-from .workers.deployment_worker import process_deployment
-from .docker_manager import stop_container, start_container, container_status, get_container_logs, container_details
+from app.db.database import engine, get_db
+from app.models import models, schemas
+from app.db import crud
+from app.core import utils, auth
+from app.services.cleanup_service import cleanup_deployment
+from app.core.deployment_states import update_status
+from app.services.health_service import check_service_health
+from app.core.errors import DeploymentError
+from app.workers.queue import deployment_queue
+from app.workers.deployment_worker import process_deployment
+from app.services.docker_service import stop_container, start_container, container_status, get_container_logs, container_details
 
-app = FastAPI()
+app = FastAPI(title="DevDeploy Platform API")
 
-Base.metadata.create_all(bind=engine)
+models.Base.metadata.create_all(bind=engine)
+
+@app.exception_handler(DeploymentError)
+def deployment_error_handler(request, exc):
+    return JSONResponse(
+        status_code=400,
+        content={
+            "error": True,
+            "message": exc.message
+        }
+    )
 
 @app.get("/")
 def home():
@@ -242,7 +258,7 @@ def stop_deployment(
     if deployment.container_id:
         stop_container(deployment.container_id)
         
-    deployment.status = "stopped"
+    update_status(deployment, "stopped")
     db.commit()
     return {"message": "Deployment stopped"}
 
@@ -270,7 +286,7 @@ def start_deployment(
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
             
-    deployment.status = "running"
+    update_status(deployment, "running")
     db.commit()
     return {"message": "Deployment started"}
 
@@ -295,7 +311,7 @@ def get_deployment_status(
     if deployment.container_id:
         status = container_status(deployment.container_id)
         if status != "not_found":
-            deployment.status = status
+            update_status(deployment, status)
             db.commit()
             
     return {"status": deployment.status}
@@ -373,7 +389,7 @@ def deployment_details(
         container_info = container_details(deployment.container_id)
         
         if container_info:
-            deployment.status = container_info["status"]
+            update_status(deployment, container_info["status"])
             db.commit()
 
     return {
@@ -390,7 +406,10 @@ def deployment_details(
         "build_logs": deployment.build_logs,
         "runtime_logs": runtime_logs,
         "container": container_info,
-        "health": deployment.health_status
+        "health": deployment.health_status,
+        "retry_count": deployment.retry_count,
+        "max_retries": deployment.max_retries,
+        "last_error": deployment.last_error
     }
 
 @app.get("/deployments/{deployment_id}/health")
@@ -446,3 +465,34 @@ def delete_deployment(
     db.commit()
 
     return {"message": "Deployment removed"}
+
+@app.post("/deployments/{deployment_id}/retry")
+def retry_deployment(
+    deployment_id: int,
+    user_id: int = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    deployment = crud.get_deployment(db, deployment_id)
+    if not deployment:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    project = db.query(models.Project).filter(
+        models.Project.id == deployment.project_id,
+        models.Project.owner_id == user_id
+    ).first()
+
+    if not project:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if deployment.retry_count >= deployment.max_retries:
+        return {"message": "Retry limit reached"}
+
+    update_status(deployment, "pending")
+    db.commit()
+
+    deployment_queue.enqueue(process_deployment, deployment.id)
+
+    return {
+        "message": "Retry started",
+        "retry": deployment.retry_count
+    }

@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from .database import Base
+from app.db.database import Base
+from app.core.settings import settings
 
 class User(Base):
     __tablename__ = "users"
@@ -46,6 +47,9 @@ class Deployment(Base):
     image_tag = Column(String, nullable=True)
     build_logs = Column(String, nullable=True)
     health_status = Column(String, default="unknown")
+    retry_count = Column(Integer, default=0)
+    max_retries = Column(Integer, default=settings.MAX_RETRIES)
+    last_error = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     project = relationship("Project")

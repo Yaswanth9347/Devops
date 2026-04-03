@@ -1,15 +1,18 @@
 import docker
-from ..database import SessionLocal
-from .. import models
-from ..port_manager import generate_port
-from ..nginx_manager import create_config
-from ..build_manager import get_runtime_image
-from ..env_manager import parse_env_string
-from ..crud import deactivate_project_deployments
-from ..git_manager import clone_repo
-from ..docker_builder import build_image, has_dockerfile
-from ..docker_manager import remove_container
-from ..health_manager import check_service_health
+from app.db.database import SessionLocal
+from app.models import models
+from app.services.port_service import generate_port
+from app.services.nginx_service import create_config
+from app.services.runtime_service import get_runtime_image
+from app.services.env_service import parse_env_string
+from app.db.crud import deactivate_project_deployments
+from app.services.git_service import clone_repo
+from app.services.build_service import build_image, has_dockerfile
+from app.services.docker_service import remove_container
+from app.services.health_service import check_service_health
+from app.core.deployment_states import update_status
+from app.core.settings import settings
+from app.core.logger import logger
 
 def process_deployment(deployment_id: int):
     db = SessionLocal()
@@ -23,7 +26,8 @@ def process_deployment(deployment_id: int):
         return
 
     # Mark as building
-    deployment.status = "building"
+    if not update_status(deployment, "building"):
+        logger.warning(f"Deployment {deployment.id}: Invalid transition to building")
     deployment.build_status = "building"
     db.commit()
 
@@ -65,13 +69,14 @@ def process_deployment(deployment_id: int):
                     deployment.build_status = "built"
                     db.commit()
                 except Exception as build_error:
-                    deployment.status = "failed"
+                    logger.error(f"Deployment {deployment.id} build failed: {build_error}")
+                    update_status(deployment, "failed")
                     deployment.build_status = "failed"
                     deployment.build_logs = str(build_error)
                     db.commit()
                     return
             else:
-                deployment.status = "failed"
+                update_status(deployment, "failed")
                 deployment.build_status = "no_dockerfile"
                 db.commit()
                 return
@@ -92,8 +97,10 @@ def process_deployment(deployment_id: int):
         deployment.build_status = "completed"
 
         # Point to the Nginx Reverse Proxy URL
-        deployment.url = f"http://localhost:{8000 + deployment.id}"
-        deployment.status = "running"
+        deployment.url = f"http://localhost:{settings.NGINX_BASE_PORT + deployment.id}"
+        
+        if not update_status(deployment, "running"):
+            logger.warning(f"Deployment {deployment.id}: Invalid transition to running")
 
         # Configure reverse proxy instantly
         create_config(deployment.id, port)
@@ -110,16 +117,19 @@ def process_deployment(deployment_id: int):
         for old in old_deployments:
             if old.container_id:
                 remove_container(old.container_id)
-                old.status = "stopped"
+                update_status(old, "stopped")
                 
         # Test Initial Health
         health = check_service_health(deployment.url)
         deployment.health_status = health
         db.commit()
+        logger.info(f"Deployment {deployment.id} successfully processed and running")
         
     except Exception as e:
-        print(f"Docker execution failed: {e}")
-        deployment.status = "failed"
+        logger.error(f"Deployment {deployment.id} execution failed: {e}")
+        deployment.retry_count += 1
+        deployment.last_error = str(e)
+        update_status(deployment, "failed")
         deployment.build_status = "failed"
 
     db.commit()

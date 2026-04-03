@@ -1,11 +1,12 @@
 import os
 import subprocess
+from app.core.settings import settings
 
 def has_dockerfile(path: str) -> bool:
     return os.path.exists(os.path.join(path, "Dockerfile"))
 
 def build_image(source_path: str, deployment_id: int):
-    tag = f"devdeploy:{deployment_id}"
+    tag = f"{settings.DOCKER_PREFIX}:{deployment_id}"
     result = subprocess.run([
         "docker",
         "build",

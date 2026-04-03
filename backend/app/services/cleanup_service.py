@@ -1,4 +1,4 @@
-from .docker_manager import remove_container, remove_image, prune_docker
+from app.services.docker_service import remove_container, remove_image, prune_docker
 
 def cleanup_deployment(deployment):
     if deployment.container_id:
