@@ -45,6 +45,7 @@ class Deployment(Base):
     source_path = Column(String, nullable=True)
     image_tag = Column(String, nullable=True)
     build_logs = Column(String, nullable=True)
+    health_status = Column(String, default="unknown")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     project = relationship("Project")

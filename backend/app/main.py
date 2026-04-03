@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from .database import engine, Base, get_db
 from . import models, schemas, crud, utils, auth
 from .cleanup_manager import cleanup_deployment
+from .health_manager import check_service_health
 from .workers.queue import deployment_queue
 from .workers.deployment_worker import process_deployment
 from .docker_manager import stop_container, start_container, container_status, get_container_logs, container_details
@@ -214,7 +215,8 @@ def project_macro_summary(
             "version": d.version,
             "status": d.status,
             "is_active": d.is_active,
-            "url": d.url
+            "url": d.url,
+            "health_status": d.health_status
         })
         
     return summary
@@ -387,7 +389,38 @@ def deployment_details(
         "is_active": deployment.is_active,
         "build_logs": deployment.build_logs,
         "runtime_logs": runtime_logs,
-        "container": container_info
+        "container": container_info,
+        "health": deployment.health_status
+    }
+
+@app.get("/deployments/{deployment_id}/health")
+def deployment_health(
+    deployment_id: int,
+    user_id: int = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    deployment = crud.get_deployment(db, deployment_id)
+    if not deployment:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    project = db.query(models.Project).filter(
+        models.Project.id == deployment.project_id,
+        models.Project.owner_id == user_id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if not deployment.url:
+        return {"health": "unknown"}
+
+    health = check_service_health(deployment.url)
+    deployment.health_status = health
+    db.commit()
+
+    return {
+        "health": health,
+        "url": deployment.url
     }
 
 @app.delete("/deployments/{deployment_id}")

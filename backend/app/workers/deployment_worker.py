@@ -9,6 +9,7 @@ from ..crud import deactivate_project_deployments
 from ..git_manager import clone_repo
 from ..docker_builder import build_image, has_dockerfile
 from ..docker_manager import remove_container
+from ..health_manager import check_service_health
 
 def process_deployment(deployment_id: int):
     db = SessionLocal()
@@ -110,6 +111,11 @@ def process_deployment(deployment_id: int):
             if old.container_id:
                 remove_container(old.container_id)
                 old.status = "stopped"
+                
+        # Test Initial Health
+        health = check_service_health(deployment.url)
+        deployment.health_status = health
+        db.commit()
         
     except Exception as e:
         print(f"Docker execution failed: {e}")
