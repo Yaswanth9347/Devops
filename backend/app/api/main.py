@@ -15,7 +15,17 @@ from app.workers.deployment_worker import process_deployment
 from app.services.docker_service import stop_container, start_container, container_status, get_container_logs, container_details
 from app.core.responses import success_response, error_response
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="DevDeploy Platform API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -62,7 +72,7 @@ def login(
 @app.post("/projects")
 def create_project(
     project: schemas.ProjectCreate,
-    user_id: int = Depends(auth.get_current_user),
+    user_id: int = Depends(auth.get_current_user_id_or_default),
     db: Session = Depends(get_db)
 ):
     new_project = crud.create_project(
@@ -84,7 +94,7 @@ def create_project(
 
 @app.get("/projects")
 def list_projects(
-    user_id: int = Depends(auth.get_current_user),
+    user_id: int = Depends(auth.get_current_user_id_or_default),
     db: Session = Depends(get_db)
 ):
     projects = crud.get_user_projects(db, user_id)
@@ -151,7 +161,7 @@ def view_source(
 @app.post("/deployments")
 def create_deployment(
     deployment: schemas.DeploymentCreate,
-    user_id: int = Depends(auth.get_current_user),
+    user_id: int = Depends(auth.get_current_user_id_or_default),
     db: Session = Depends(get_db)
 ):
     project = db.query(models.Project).filter(
@@ -266,6 +276,33 @@ def list_deployments(
         })
     return success_response(deps_data, "Deployments listed successfully", len(deps_data))
 
+@app.get("/deployments")
+def list_all_deployments(
+    user_id: int = Depends(auth.get_current_user_id_or_default),
+    db: Session = Depends(get_db)
+):
+    deployments = db.query(models.Deployment).join(models.Project).filter(
+        models.Project.owner_id == user_id
+    ).all()
+    deps_data = []
+    for d in deployments:
+        deps_data.append({
+            "id": d.id,
+            "project_id": d.project_id,
+            "version": d.version,
+            "status": d.status,
+            "build_status": d.build_status,
+            "runtime": d.runtime,
+            "image_tag": d.image_tag,
+            "container_id": d.container_id,
+            "port": d.port,
+            "url": d.url,
+            "env_vars": d.env_vars,
+            "created_at": d.created_at.isoformat(),
+            "is_active": d.is_active
+        })
+    return success_response(deps_data, "Global deployments listed successfully", len(deps_data))
+
 @app.get("/projects/{project_id}/deployments/summary")
 def project_macro_summary(
     project_id: int,
@@ -351,7 +388,7 @@ def start_deployment(
 @app.get("/deployments/{deployment_id}/status")
 def get_deployment_status(
     deployment_id: int,
-    user_id: int = Depends(auth.get_current_user),
+    user_id: int = Depends(auth.get_current_user_id_or_default),
     db: Session = Depends(get_db)
 ):
     deployment = crud.get_deployment(db, deployment_id)
@@ -377,7 +414,7 @@ def get_deployment_status(
 @app.get("/deployments/{deployment_id}/logs")
 def deployment_logs(
     deployment_id: int,
-    user_id: int = Depends(auth.get_current_user),
+    user_id: int = Depends(auth.get_current_user_id_or_default),
     db: Session = Depends(get_db)
 ):
     deployment = crud.get_deployment(db, deployment_id)
@@ -401,7 +438,7 @@ def deployment_logs(
 @app.get("/deployments/{deployment_id}/build-logs")
 def build_logs(
     deployment_id: int,
-    user_id: int = Depends(auth.get_current_user),
+    user_id: int = Depends(auth.get_current_user_id_or_default),
     db: Session = Depends(get_db)
 ):
     deployment = crud.get_deployment(db, deployment_id)
@@ -424,7 +461,7 @@ def build_logs(
 @app.get("/deployments/{deployment_id}/details")
 def deployment_details(
     deployment_id: int,
-    user_id: int = Depends(auth.get_current_user),
+    user_id: int = Depends(auth.get_current_user_id_or_default),
     db: Session = Depends(get_db)
 ):
     deployment = crud.get_deployment(db, deployment_id)

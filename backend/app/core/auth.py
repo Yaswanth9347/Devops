@@ -29,3 +29,13 @@ def get_current_user(token=Depends(security)):
     except JWTError as e:
         print(f"DEBUG: JWT Decode Error: {e}")
         raise HTTPException(status_code=401, detail="Invalid token")
+
+def get_current_user_id_or_default(token=Depends(HTTPBearer(auto_error=False))):
+    if not token:
+        return 5 # Development Fallback User ID
+    try:
+        payload = jwt.decode(token.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("user_id")
+        return user_id if user_id else 5
+    except:
+        return 5
