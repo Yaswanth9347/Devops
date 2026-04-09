@@ -1,64 +1,92 @@
-import { colors } from "../../utils/theme";
-import Spinner from "./Spinner";
+import React from 'react';
+import { Loader2 } from 'lucide-react';
 
-const VARIANT_COLOR = {
-  primary: colors.primary,
-  info: colors.info,
-  success: colors.success,
-  danger: colors.danger,
-  warning: "#f39c12",
-  muted: colors.muted
-};
-
-function Button({
-  children,
-  onClick,
-  variant = "primary",
-  loading = false,
-  loadingText = "Processing...",
-  disabled = false,
-  htmlType = "button",
+function Button({ 
+  children, 
+  variant = 'primary', 
+  size = 'md', 
+  isLoading = false, 
+  icon: Icon,
+  className = '',
   style = {},
-  onMouseEnter,
-  onMouseLeave
+  ...props 
 }) {
-  const background = VARIANT_COLOR[variant] || VARIANT_COLOR.primary;
-  const isDisabled = disabled || loading;
+  const getVariantStyles = () => {
+    switch (variant) {
+      case 'secondary':
+        return {
+          background: 'var(--bg-secondary)',
+          color: 'var(--text-primary)',
+          border: '1px solid var(--border-default)',
+        };
+      case 'ghost':
+        return {
+          background: 'transparent',
+          color: 'var(--text-secondary)',
+          border: '1px solid transparent',
+        };
+      case 'danger':
+        return {
+          background: 'var(--error-color)',
+          color: '#ffffff',
+          border: '1px solid var(--error-color)',
+        };
+      case 'primary':
+      default:
+        return {
+          background: 'var(--primary-color)',
+          color: '#ffffff',
+          border: '1px solid var(--primary-color)',
+        };
+    }
+  };
+
+  const getSizeStyles = () => {
+    switch (size) {
+      case 'sm':
+        return { padding: '6px 12px', fontSize: '13px', borderRadius: 'var(--radius-sm)' };
+      case 'lg':
+        return { padding: '12px 24px', fontSize: '15px', borderRadius: 'var(--radius-lg)' };
+      case 'md':
+      default:
+        return { padding: '8px 16px', fontSize: '14px', borderRadius: 'var(--radius-md)' };
+    }
+  };
+
+  const baseStyles = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    fontWeight: '500',
+    transition: 'all 0.15s ease',
+    opacity: props.disabled || isLoading ? 0.6 : 1,
+    cursor: props.disabled || isLoading ? 'not-allowed' : 'pointer',
+    ...getVariantStyles(),
+    ...getSizeStyles(),
+    ...style
+  };
 
   return (
-    <button
-      type={htmlType}
-      onClick={onClick}
-      disabled={isDisabled}
-      onMouseEnter={(event) => {
-        if (!isDisabled) event.currentTarget.style.opacity = "0.85";
-        if (onMouseEnter) onMouseEnter(event);
+    <button 
+      style={baseStyles}
+      disabled={props.disabled || isLoading}
+      {...props}
+      onMouseOver={(e) => {
+        if (props.disabled || isLoading) return;
+        if (variant === 'primary') e.currentTarget.style.background = 'var(--primary-hover)';
+        if (variant === 'secondary') e.currentTarget.style.background = 'var(--bg-hover)';
+        if (variant === 'ghost') e.currentTarget.style.background = 'var(--bg-hover)';
       }}
-      onMouseLeave={(event) => {
-        event.currentTarget.style.opacity = isDisabled ? "0.6" : "1";
-        if (onMouseLeave) onMouseLeave(event);
-      }}
-      style={{
-        background,
-        color: "white",
-        border: "none",
-        padding: "7px 14px",
-        borderRadius: "6px",
-        cursor: isDisabled ? "not-allowed" : "pointer",
-        opacity: isDisabled ? 0.6 : 1,
-        fontWeight: "600",
-        transition: "opacity 0.15s ease, transform 0.15s ease",
-        ...style
+      onMouseOut={(e) => {
+        if (props.disabled || isLoading) return;
+        if (variant === 'primary') e.currentTarget.style.background = 'var(--primary-color)';
+        if (variant === 'secondary') e.currentTarget.style.background = 'var(--bg-secondary)';
+        if (variant === 'ghost') e.currentTarget.style.background = 'transparent';
       }}
     >
-      {loading ? (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
-          <Spinner size={14} borderWidth={2} color="#fff" trackColor="rgba(255,255,255,0.4)" inline />
-          <span>{loadingText}</span>
-        </span>
-      ) : (
-        children
-      )}
+      {isLoading ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : Icon && <Icon size={16} />}
+      {children}
     </button>
   );
 }

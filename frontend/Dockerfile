@@ -1,15 +1,19 @@
-FROM node:22-alpine
+# Build stage
+FROM node:22-alpine as build
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package*.json ./
+RUN npm install
 
 COPY . .
 RUN npm run build
 
-RUN npm install -g serve
+# Production stage
+FROM nginx:alpine
 
-EXPOSE 3000
+COPY --from=build /app/dist /usr/share/nginx/html
 
-CMD ["serve", "-s", "dist", "-l", "3000"]
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

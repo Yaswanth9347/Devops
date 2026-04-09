@@ -1,0 +1,65 @@
+version: '3.9'
+
+services:
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: medical-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-devuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-devpass}
+      POSTGRES_DB: ${DB_NAME:-devdeploy}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - medical-network
+
+  backend:
+    build: ./backend
+    container_name: medical-backend
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    env_file:
+      - .env.prod
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - medical-network
+
+  frontend:
+    build: ./frontend
+    container_name: medical-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    env_file:
+      - .env.prod
+    networks:
+      - medical-network
+
+  nginx:
+    image: nginx:latest
+    container_name: medical-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - medical-network
+
+volumes:
+  pg_data:
+
+networks:
+  medical-network:

@@ -1,19 +1,43 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { 
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
+  LineChart, Line, CartesianGrid 
+} from "recharts";
+import { 
+  FolderGit2, Rocket, AlertTriangle, CheckCircle2, 
+  Activity, ArrowUpRight, ArrowDownRight, ServerCrash, Zap, AlertCircle
+} from "lucide-react";
 import API from "../services/api";
 import PageContainer from "../components/PageContainer";
-import Section from "../components/ui/Section";
-import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
-import EmptyState from "../components/ui/EmptyState";
-import StatCard from "../components/ui/StatCard";
-import DeploymentCard from "../components/DeploymentCard";
-import ActivityItem from "../components/ui/ActivityItem";
-import PageState from "../components/ui/PageState";
+import StatusBadge from "../components/StatusBadge";
 import { useToastContext } from "../hooks/useToast";
-import { colors } from "../utils/theme";
 import { getRequestErrorMessage } from "../utils/requestErrors";
-import { formatDate, timeAgo } from "../utils/date";
+import { timeAgo } from "../utils/date";
+
+function StatCard({ title, value, icon: Icon, trend, className = "" }) {
+  const isPositive = trend >= 0;
+  return (
+    <div className={`card ${className}`} style={{ padding: "var(--space-4)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "var(--space-4)" }}>
+        <div style={{ padding: "var(--space-2)", background: "var(--bg-hover)", borderRadius: "var(--radius-md)" }}>
+          <Icon size={20} color="var(--text-secondary)" />
+        </div>
+        {trend !== undefined && (
+          <div style={{ display: "flex", alignItems: "center", gap: "2px", color: isPositive ? "var(--success-color)" : "var(--error-color)", fontSize: "13px", fontWeight: 500 }}>
+            {isPositive ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
+            {Math.abs(trend)}%
+          </div>
+        )}
+      </div>
+      <div>
+        <h3 style={{ fontSize: "28px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 4px" }}>{value}</h3>
+        <p style={{ color: "var(--text-secondary)", fontSize: "14px", margin: 0 }}>{title}</p>
+      </div>
+    </div>
+  );
+}
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -21,330 +45,200 @@ function Dashboard() {
   const [deployments, setDeployments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState(null);
-  const [error, setError] = useState(null);
   const { showToast } = useToastContext();
 
-  const totalProjects = projects.length;
-  const totalDeployments = deployments.length;
-  const runningDeployments = deployments.filter((deployment) => deployment.status === "running").length;
-  const failedDeployments = deployments.filter((deployment) => deployment.status === "failed").length;
-  const buildingDeployments = deployments.filter((deployment) => ["building", "deploying", "pending", "cloning"].includes(deployment.status)).length;
-  const successDeployments = deployments.filter((deployment) => ["running", "completed", "success"].includes(deployment.status)).length;
-  const health = failedDeployments > 0 ? "Attention Needed" : "Healthy";
-  const successRate = totalDeployments > 0 ? Math.round((runningDeployments / totalDeployments) * 100) : 0;
-
-  const projectNameById = useMemo(() => {
-    return projects.reduce((accumulator, project) => {
-      accumulator[String(project.id)] = project.name;
-      return accumulator;
-    }, {});
-  }, [projects]);
-
-  const recentFailures = useMemo(() => {
-    return [...deployments]
-      .filter((deployment) => deployment.status === "failed" || deployment.build_status === "failed")
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .slice(0, 3);
-  }, [deployments]);
-
-  const recentSuccesses = useMemo(() => {
-    return [...deployments]
-      .filter((deployment) => ["running", "completed", "success"].includes(deployment.status))
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .slice(0, 3);
-  }, [deployments]);
-
-  const recentDeployments = useMemo(() => {
-    return [...deployments]
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .slice(0, 5);
-  }, [deployments]);
-
-  const recentActivities = useMemo(() => {
-    const activities = [];
-
-    projects.forEach((project) => {
-      activities.push({
-        type: "project",
-        message: `Project ${project.name} was created`,
-        date: project.created_at
-      });
-    });
-
-    deployments.forEach((deployment) => {
-      const projectName = projectNameById[String(deployment.project_id)] || `Project #${deployment.project_id}`;
-
-      activities.push({
-        type: "deployment",
-        message: `Deployment v${deployment.version} is ${deployment.status} for ${projectName}`,
-        date: deployment.created_at
-      });
-
-      activities.push({
-        type: "operation",
-        message: `Operation recorded for ${projectName}`,
-        date: deployment.created_at
-      });
-
-      if (deployment.status === "failed" || deployment.build_status === "failed") {
-        activities.push({
-          type: "failure",
-          message: `Deployment v${deployment.version} failed for ${projectName}`,
-          date: deployment.created_at
-        });
-      }
-    });
-
-    return activities
-      .filter((activity) => Boolean(activity.date))
-      .sort((a, b) => new Date(b.date) - new Date(a.date))
-      .slice(0, 8);
-  }, [projects, deployments, projectNameById]);
-
   const loadDashboard = async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setError(null);
+    isRefresh ? setRefreshing(true) : setLoading(true);
     try {
       const [projectsRes, deploymentsRes] = await Promise.all([
         API.get("/projects"),
         API.get("/deployments")
       ]);
-
-      if (!projectsRes.data?.success || !Array.isArray(projectsRes.data.data)) {
-        throw new Error("Invalid server response while loading projects summary.");
-      }
-
-      if (!deploymentsRes.data?.success || !Array.isArray(deploymentsRes.data.data)) {
-        throw new Error("Invalid server response while loading deployments summary.");
-      }
-
-      setProjects(projectsRes.data.data);
-      setDeployments(deploymentsRes.data.data);
-      setLastRefresh(new Date().toISOString());
+      if (projectsRes.data?.success) setProjects(projectsRes.data.data || []);
+      if (deploymentsRes.data?.success) setDeployments(deploymentsRes.data.data || []);
     } catch (err) {
-      const message = err?.message?.includes("Invalid server response")
-        ? err.message
-        : getRequestErrorMessage(err, "Unable to connect to server for dashboard metrics.");
-      setError(message);
-      showToast(message, "error");
+      showToast(getRequestErrorMessage(err, "Unable to load dashboard"), "error");
     } finally {
-      if (isRefresh) setRefreshing(false);
-      else setLoading(false);
+      isRefresh ? setRefreshing(false) : setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadDashboard();
-  }, []);
+  useEffect(() => { loadDashboard(); }, []);
 
-  const priorityAction = failedDeployments > 0
-    ? { label: "View Failures", action: () => navigate("/deployments") }
-    : { label: "Create Project", action: () => navigate("/projects") };
+  const totalProjects = projects.length;
+  const totalDeployments = deployments.length;
+  const running = deployments.filter(d => d.status === "running").length;
+  const failed = deployments.filter(d => d.status === "failed").length;
+  const successRate = totalDeployments ? Math.round(((totalDeployments - failed) / totalDeployments) * 100) : 0;
 
-  const headerActions = (
-    <Button
-      onClick={() => loadDashboard(true)}
-      loading={refreshing}
-      loadingText="Refreshing..."
-      disabled={refreshing}
-      variant={refreshing ? "muted" : "info"}
-      style={{ padding: "8px 16px" }}
-    >
-      Refresh Insights
-    </Button>
-  );
+  // Mock chart data for UI
+  const lineChartData = [
+    { name: 'Mon', success: 400, failed: 24 },
+    { name: 'Tue', success: 300, failed: 13 },
+    { name: 'Wed', success: 200, failed: 8 },
+    { name: 'Thu', success: 278, failed: 39 },
+    { name: 'Fri', success: 189, failed: 48 },
+    { name: 'Sat', success: 239, failed: 38 },
+    { name: 'Sun', success: 349, failed: 43 },
+  ];
+
+  const barChartData = [
+    { reason: 'Build Error', count: 12 },
+    { reason: 'Timeout', count: 5 },
+    { reason: 'Config', count: 3 },
+    { reason: 'Resource', count: 8 }
+  ];
+
+  const projectNameById = useMemo(() => {
+    return projects.reduce((acc, p) => ({ ...acc, [p.id]: p.name }), {});
+  }, [projects]);
+
+  const recentFailures = deployments.filter(d => d.status === "failed").slice(0, 4);
+  const recentActivities = deployments.slice(0, 6);
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", height: "100%", alignItems: "center" }}>
+        <div className="skeleton" style={{ width: "100%", height: "100%" }} />
+      </div>
+    );
+  }
 
   return (
-    <PageContainer
-      title="DevOps Control Panel"
-      subtitle="Manage deployments, review system health, and prioritize operational actions."
-      actions={headerActions}
-    >
-      <PageState
-        loading={loading}
-        error={error}
-        loadingText="Connecting to backend..."
-        onRetry={loadDashboard}
-        retryLabel="Retry Loading"
-      >
-        <>
-          <Section title="Platform Overview">
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "12px", marginBottom: "14px" }}>
-              <StatCard title="Total Projects" value={totalProjects} accent={colors.info} />
-              <StatCard title="Total Deployments" value={totalDeployments} accent={colors.primary} />
-              <StatCard title="Running Deployments" value={runningDeployments} accent={colors.success} />
-              <StatCard title="Failed Deployments" value={failedDeployments} accent={colors.danger} />
-            </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
+      {/* Header Actions */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <h1 style={{ marginBottom: "var(--space-1)" }}>Dashboard</h1>
+          <p style={{ color: "var(--text-secondary)", margin: 0 }}>Overview of your projects and deployments.</p>
+        </div>
+        <div style={{ display: "flex", gap: "var(--space-3)" }}>
+          <Button variant="secondary" onClick={() => loadDashboard(true)} isLoading={refreshing}>
+            Refresh
+          </Button>
+          <Button variant="primary" onClick={() => navigate("/projects")}>
+            New Deployment
+          </Button>
+        </div>
+      </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "12px" }}>
-              <Card style={{ marginBottom: 0 }}>
-                <h3 style={{ margin: "0 0 8px", color: "#1a1d2e", fontSize: "0.98em" }}>Platform Summary</h3>
-                <p style={{ margin: "0 0 6px", color: "#555", fontSize: "0.9em" }}>{totalProjects} active projects</p>
-                <p style={{ margin: "0 0 6px", color: "#555", fontSize: "0.9em" }}>{totalDeployments} total deployments</p>
-                <p style={{ margin: 0, color: failedDeployments > 0 ? colors.danger : "#555", fontWeight: 600, fontSize: "0.9em" }}>
-                  {failedDeployments > 0 ? `${failedDeployments} deployments need attention` : "No deployments need attention"}
-                </p>
-              </Card>
+      {failed > 0 && (
+         <div style={{
+           background: "var(--error-bg)",
+           border: "1px solid var(--error-border)",
+           padding: "var(--space-4)",
+           borderRadius: "var(--radius-md)",
+           display: "flex",
+           alignItems: "center",
+           justifyContent: "space-between"
+         }}>
+           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+             <AlertTriangle color="var(--error-color)" />
+             <div>
+               <h3 style={{ color: "var(--error-color)", margin: "0 0 2px", fontSize: "15px" }}>Attention Needed</h3>
+               <p style={{ color: "#7F1D1D", margin: 0, fontSize: "14px" }}>{failed} deployments have failed recently and require your attention.</p>
+             </div>
+           </div>
+           <Button variant="danger" onClick={() => navigate("/deployments")}>View Failures</Button>
+         </div>
+      )}
 
-              <Card style={{ marginBottom: 0 }}>
-                <h3 style={{ margin: "0 0 8px", color: "#1a1d2e", fontSize: "0.98em" }}>Deployment Status</h3>
-                <p style={{ margin: "0 0 6px", color: "#555", fontSize: "0.9em" }}>Running: {runningDeployments}</p>
-                <p style={{ margin: "0 0 6px", color: "#555", fontSize: "0.9em" }}>Building: {buildingDeployments}</p>
-                <p style={{ margin: "0 0 6px", color: colors.danger, fontSize: "0.9em", fontWeight: 600 }}>Failed: {failedDeployments}</p>
-                <p style={{ margin: 0, color: colors.success, fontSize: "0.9em" }}>Recent Successes: {successDeployments}</p>
-              </Card>
+      {/* KPI Row */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "var(--space-4)" }}>
+        <StatCard title="Total Projects" value={totalProjects} icon={FolderGit2} trend={12} />
+        <StatCard title="Total Deployments" value={totalDeployments} icon={Rocket} trend={24} />
+        <StatCard title="Running" value={running} icon={Activity} trend={8} />
+        <StatCard title="Failed" value={failed} icon={ServerCrash} trend={failed > 0 ? -15 : 0} />
+      </div>
 
-              <Card style={{ marginBottom: 0 }}>
-                <h3 style={{ margin: "0 0 8px", color: "#1a1d2e", fontSize: "0.98em" }}>Platform Readiness</h3>
-                <p style={{ margin: "0 0 6px", color: failedDeployments > 0 ? colors.danger : colors.success, fontWeight: 700 }}>
-                  {health}
-                </p>
-                <p style={{ margin: "0 0 6px", color: "#555", fontSize: "0.88em" }}>Success Rate: {successRate}%</p>
-                <p style={{ margin: 0, color: "#6b7280", fontSize: "0.82em" }}>
-                  {lastRefresh ? `Last updated ${timeAgo(lastRefresh)} (${formatDate(lastRefresh)})` : "Awaiting initial refresh"}
-                </p>
-              </Card>
-            </div>
-          </Section>
-
-          {failedDeployments > 0 && (
-            <Section title="Attention Needed">
-              <h3 style={{ margin: "0 0 8px", color: "#1a1d2e", fontSize: "0.98em" }}>Platform Health</h3>
-              <Card style={{ marginBottom: 0, borderColor: "#f4cccc", background: "#fff7f7" }}>
-                <p style={{ margin: "0 0 10px", color: "#8a4040", fontSize: "0.9em" }}>
-                  {failedDeployments} deployments failed and require action.
-                </p>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <Button onClick={() => navigate("/deployments")} variant="danger">View Failures</Button>
-                  <Button onClick={() => loadDashboard(true)} variant="muted">Refresh Status</Button>
-                </div>
-              </Card>
-            </Section>
-          )}
-
-          <Section title="Recent Signals">
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "12px" }}>
-              <Card style={{ marginBottom: 0 }}>
-                <h3 style={{ margin: "0 0 8px", color: colors.danger, fontSize: "0.95em" }}>Recent Failures</h3>
-                {recentFailures.length === 0 ? (
-                  <p style={{ margin: 0, color: "#6b7280", fontSize: "0.86em" }}>No recent failures.</p>
-                ) : (
-                  recentFailures.map((deployment) => {
-                    const projectName = projectNameById[String(deployment.project_id)] || `Project #${deployment.project_id}`;
-                    return (
-                      <p key={`failure-${deployment.id}`} style={{ margin: "0 0 6px", color: "#8a4040", fontSize: "0.86em" }}>
-                        v{deployment.version} failed for {projectName}
-                      </p>
-                    );
-                  })
-                )}
-              </Card>
-
-              <Card style={{ marginBottom: 0 }}>
-                <h3 style={{ margin: "0 0 8px", color: colors.success, fontSize: "0.95em" }}>Recent Successes</h3>
-                {recentSuccesses.length === 0 ? (
-                  <p style={{ margin: 0, color: "#6b7280", fontSize: "0.86em" }}>No recent successful deployments yet.</p>
-                ) : (
-                  recentSuccesses.map((deployment) => {
-                    const projectName = projectNameById[String(deployment.project_id)] || `Project #${deployment.project_id}`;
-                    return (
-                      <p key={`success-${deployment.id}`} style={{ margin: "0 0 6px", color: "#3d7a54", fontSize: "0.86em" }}>
-                        v{deployment.version} healthy for {projectName}
-                      </p>
-                    );
-                  })
-                )}
-              </Card>
-            </div>
-          </Section>
-
-          <Section title="Action Priorities">
-            <Card style={{ marginBottom: 0 }}>
-              <h3 style={{ margin: "0 0 10px", color: "#1a1d2e", fontSize: "0.98em" }}>Recommended Next Step</h3>
-              <p style={{ margin: "0 0 10px", color: "#555", fontSize: "0.9em" }}>
-                {failedDeployments > 0
-                  ? "Resolve failed deployments first to restore platform health."
-                  : "Platform is stable. Add a project or run a new deployment."}
-              </p>
-              <Button onClick={priorityAction.action} variant={failedDeployments > 0 ? "danger" : "primary"}>
-                {priorityAction.label}
-              </Button>
-            </Card>
-          </Section>
-
-          <Section title="Recent Deployments">
-            {recentDeployments.length === 0 ? (
-              <EmptyState
-                icon="📭"
-                title="No Recent Deployments"
-                message="Deploy a project to see activity here."
-                action={<Button onClick={() => navigate("/projects")} variant="primary">Create Project</Button>}
-              />
-            ) : (
-              <div>
-                {recentDeployments.map((deployment) => (
-                  <DeploymentCard key={deployment.id} deployment={deployment} />
-                ))}
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "var(--space-4)" }}>
+        {/* Main Charts Area */}
+        <div className="card" style={{ padding: "var(--space-5)", display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h2 style={{ fontSize: "18px", margin: 0 }}>Deployment Activity</h2>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--text-secondary)" }}>
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--primary-color)" }} />
+                Success
               </div>
-            )}
-          </Section>
-
-          <Section title="Recent Operations">
-            <Card style={{ marginBottom: 0 }}>
-              {recentActivities.length === 0 ? (
-                <EmptyState
-                  icon="🕒"
-                  title="No Activity Yet"
-                  message="Platform activity will appear here."
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--text-secondary)" }}>
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--error-color)" }} />
+                Failed
+              </div>
+            </div>
+          </div>
+          
+          <div style={{ height: "300px" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={lineChartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-default)" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }} dy={10} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }} dx={-10} />
+                <Tooltip 
+                  contentStyle={{ background: "var(--bg-secondary)", borderRadius: "var(--radius-md)", border: "1px solid var(--border-default)" }}
                 />
-              ) : (
-                <div>
-                  {recentActivities.map((activity) => (
-                    <ActivityItem key={`${activity.type}-${activity.date}-${activity.message}`} activity={activity} />
-                  ))}
+                <Line type="monotone" dataKey="success" stroke="var(--primary-color)" strokeWidth={3} dot={false} />
+                <Line type="monotone" dataKey="failed" stroke="var(--error-color)" strokeWidth={3} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Right Sidebar Area */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+          {/* Health Overview */}
+          <div className="card" style={{ padding: "var(--space-5)" }}>
+            <h2 style={{ fontSize: "16px", margin: "0 0 var(--space-4)" }}>System Health</h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+                <span style={{ fontSize: "32px", fontWeight: 700, color: "var(--text-primary)", lineHeight: 1 }}>{successRate}%</span>
+                <span style={{ color: "var(--text-secondary)", fontSize: "14px" }}>Success Rate</span>
+              </div>
+              <div style={{ width: "100%", height: "8px", background: "var(--border-default)", borderRadius: "4px", overflow: "hidden", marginTop: "8px" }}>
+                <div style={{ width: `${successRate}%`, height: "100%", background: successRate > 90 ? "var(--success-color)" : successRate > 70 ? "var(--warning-color)" : "var(--error-color)", borderRadius: "4px" }} />
+              </div>
+            </div>
+          </div>
+
+          <div className="card" style={{ padding: "var(--space-5)", flex: 1 }}>
+            <h2 style={{ fontSize: "16px", margin: "0 0 var(--space-4)" }}>Recent Activity</h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+              {recentActivities.map((activity, idx) => {
+                const pName = projectNameById[activity.project_id] || "Unknown";
+                return (
+                  <div key={idx} style={{ display: "flex", gap: "var(--space-3)" }}>
+                    <div style={{ position: "relative" }}>
+                      <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "var(--bg-hover)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-secondary)", zIndex: 2, position: "relative" }}>
+                         {activity.status === "running" ? <Zap size={16} color="var(--success-color)" /> : <CheckCircle2 size={16} />}
+                      </div>
+                      {idx !== recentActivities.length - 1 && (
+                        <div style={{ position: "absolute", top: "32px", bottom: "-16px", left: "15px", width: "2px", background: "var(--border-default)" }} />
+                      )}
+                    </div>
+                    <div style={{ flex: 1, paddingBottom: "var(--space-2)" }}>
+                      <p style={{ margin: "0 0 2px", fontSize: "14px", color: "var(--text-primary)", fontWeight: 500 }}>
+                        Deployment {activity.status}
+                      </p>
+                      <p style={{ margin: 0, fontSize: "13px", color: "var(--text-secondary)" }}>
+                        {pName} • v{activity.version}
+                      </p>
+                      <span style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "4px", display: "block" }}>
+                        {timeAgo(activity.created_at)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+              {recentActivities.length === 0 && (
+                <div style={{ textAlign: "center", color: "var(--text-secondary)", padding: "var(--space-4) 0" }}>
+                  No recent activity
                 </div>
               )}
-            </Card>
-          </Section>
-
-          <Section title="Quick Navigation">
-            <Card style={{ marginBottom: 0 }}>
-              <h3 style={{ margin: "0 0 10px", color: "#1a1d2e", fontSize: "0.98em" }}>Quick Navigation</h3>
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <Button onClick={() => navigate("/projects")} variant="info">View Projects</Button>
-                <Button onClick={() => navigate("/deployments")} variant="info">View Deployments</Button>
-                <Button
-                  onClick={() => {
-                    if (!recentDeployments.length) return;
-                    navigate(`/deployments/${recentDeployments[0].id}`);
-                  }}
-                  disabled={!recentDeployments.length}
-                  variant={recentDeployments.length ? "info" : "muted"}
-                >
-                  View Latest Logs
-                </Button>
-                <Button onClick={() => navigate("/projects")} variant="primary">Create Project</Button>
-              </div>
-            </Card>
-          </Section>
-
-          <Section title="About Platform">
-            <Card style={{ marginBottom: 0 }}>
-              <h3 style={{ margin: "0 0 8px", color: "#1a1d2e", fontSize: "0.95em" }}>About Platform</h3>
-              <p style={{ margin: 0, color: "#555", fontSize: "0.88em", lineHeight: 1.6 }}>
-                DevDeploy helps teams create projects, run deployments, and monitor operational health from a single interface.
-              </p>
-            </Card>
-          </Section>
-
-          <p style={{ margin: "4px 0 0", color: "#6b7280", fontSize: "0.8em" }}>
-            {lastRefresh ? `System insights updated ${timeAgo(lastRefresh)}.` : "System insights will appear after first refresh."}
-          </p>
-        </>
-      </PageState>
-    </PageContainer>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

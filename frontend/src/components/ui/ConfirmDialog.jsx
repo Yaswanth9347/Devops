@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import Card from "./Card";
 import Button from "./Button";
 
 function ConfirmDialog({
@@ -27,46 +26,46 @@ function ConfirmDialog({
     <div
       role="dialog"
       aria-modal="true"
+      className="animate-slide-in"
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.5)",
+        background: "rgba(15, 23, 42, 0.4)",
+        backdropFilter: "blur(4px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         zIndex: 9999,
-        padding: "16px"
+        padding: "var(--space-4)"
       }}
       onClick={onCancel}
     >
-      <Card
+      <div
+        className="card"
         onClick={(event) => event.stopPropagation()}
         style={{
           width: "100%",
-          maxWidth: "360px",
-          padding: "18px 18px 16px",
-          border: "1px solid #e5e7eb",
-          boxShadow: "0 8px 30px rgba(0,0,0,0.2)",
-          marginBottom: 0
+          maxWidth: "400px",
+          padding: "var(--space-5)",
+          boxShadow: "var(--shadow-lg)",
+          animation: "slideIn 0.2s ease-out forwards"
         }}
       >
-        <h3 style={{ margin: "0 0 8px", color: "#1a1d2e", fontSize: "1.02em" }}>{title}</h3>
-        <p style={{ margin: "0 0 14px", color: "#4b5563", fontSize: "0.9em", lineHeight: 1.5 }}>{message}</p>
-        <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", flexWrap: "wrap" }}>
-          <Button onClick={onCancel} disabled={confirming} variant="muted">
+        <h3 style={{ margin: "0 0 var(--space-2)", color: "var(--text-primary)", fontSize: "18px" }}>{title}</h3>
+        <p style={{ margin: "0 0 var(--space-5)", color: "var(--text-secondary)", fontSize: "14px", lineHeight: 1.5 }}>{message}</p>
+        <div style={{ display: "flex", gap: "var(--space-3)", justifyContent: "flex-end", flexWrap: "wrap" }}>
+          <Button onClick={onCancel} disabled={confirming} variant="secondary">
             {cancelLabel}
           </Button>
           <Button
             onClick={onConfirm}
-            loading={confirming}
-            loadingText="Processing..."
-            disabled={confirming}
+            isLoading={confirming}
             variant={danger ? "danger" : "primary"}
           >
             {confirmLabel}
           </Button>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

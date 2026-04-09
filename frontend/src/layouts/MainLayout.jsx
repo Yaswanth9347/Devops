@@ -2,55 +2,81 @@ import Sidebar from "../components/Sidebar";
 import Toast from "../components/Toast";
 import useToast, { ToastContext } from "../hooks/useToast";
 import { APP_VERSION } from "../config";
+import { Bell, UserCircle } from "lucide-react";
 
 function MainLayout({ children }) {
   const { toast, showToast } = useToast();
 
   return (
     <ToastContext.Provider value={{ showToast }}>
-      <div style={{
-        display: "flex",
-        height: "100vh",
-        background: "#f4f6f9",
-        fontFamily: "'Segoe UI', system-ui, sans-serif"
-      }}>
+      <div className="app-container">
         <Sidebar />
 
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div className="main-content-wrapper">
           {/* Top Header Bar */}
-          <div style={{
-            padding: "14px 28px",
-            background: "#fff",
-            borderBottom: "1px solid #e8ecf0",
+          <header style={{
+            height: "64px",
+            padding: "0 var(--space-6)",
+            background: "var(--bg-secondary)",
+            borderBottom: "1px solid var(--border-default)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
+            flexShrink: 0,
+            zIndex: 5
           }}>
-            <span style={{ color: "#555", fontSize: "0.88em" }}>
-              ⚡ DevDeploy Platform
-            </span>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <span style={{ color: "#9ca3af", fontSize: "0.76em" }}>
-                {APP_VERSION}
-              </span>
-              <span style={{
-                width: "8px", height: "8px", borderRadius: "50%",
-                background: "#1abc9c", display: "inline-block"
-              }} />
-              <span style={{ color: "#888", fontSize: "0.82em" }}>System Online</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+              {/* Optional: Breadcrumbs or Page Title could go here */}
             </div>
-          </div>
+            
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)" }}>
+              <div style={{ 
+                display: "flex", 
+                alignItems: "center", 
+                gap: "var(--space-2)",
+                padding: "var(--space-1) var(--space-2)",
+                background: "var(--bg-primary)",
+                borderRadius: "var(--radius-lg)",
+                border: "1px solid var(--border-default)"
+              }}>
+                <span className="animate-pulse" style={{
+                  width: "8px", height: "8px", borderRadius: "50%",
+                  background: "var(--success-color)", display: "inline-block",
+                  boxShadow: "0 0 0 2px var(--success-bg)"
+                }} />
+                <span style={{ color: "var(--text-secondary)", fontSize: "12px", fontWeight: 500 }}>
+                  v{APP_VERSION}
+                </span>
+              </div>
+              
+              <div style={{ width: "1px", height: "24px", background: "var(--border-default)" }} />
+              
+              <button style={{ color: "var(--text-secondary)", position: "relative" }}>
+                 <Bell size={20} />
+                 <span style={{
+                    position: "absolute",
+                    top: "-2px",
+                    right: "-2px",
+                    width: "8px",
+                    height: "8px",
+                    borderRadius: "50%",
+                    background: "var(--error-color)",
+                    border: "2px solid var(--bg-secondary)"
+                 }} />
+              </button>
+              
+              <button style={{ color: "var(--text-secondary)" }}>
+                 <UserCircle size={24} />
+              </button>
+            </div>
+          </header>
 
           {/* Main Content */}
-          <div style={{
-            flex: 1,
-            overflowY: "auto",
-            overflowX: "hidden",
-            padding: "24px"
-          }}>
-            {children}
-          </div>
+          <main className="scrollarea">
+            <div style={{ maxWidth: "1200px", margin: "0 auto", width: "100%" }}>
+              {children}
+            </div>
+          </main>
         </div>
 
         {toast && <Toast message={toast.message} type={toast.type} />}

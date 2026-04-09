@@ -40,6 +40,10 @@ def deployment_error_handler(request, exc):
 def home():
     return success_response(message="DevDeploy API running")
 
+@app.get("/health")
+def health():
+    return {"status": "running"}
+
 @app.post("/register")
 def register_user(
     user: schemas.UserCreate,
