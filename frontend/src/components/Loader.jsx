@@ -1,3 +1,5 @@
+import Spinner from "./ui/Spinner";
+
 function Loader({ text = "Loading..." }) {
   return (
     <div style={{
@@ -8,16 +10,8 @@ function Loader({ text = "Loading..." }) {
       padding: '60px 20px',
       color: '#888'
     }}>
-      <div style={{
-        width: '40px',
-        height: '40px',
-        border: '4px solid #ecf0f1',
-        borderTop: '4px solid #3498db',
-        borderRadius: '50%',
-        animation: 'spin 0.8s linear infinite'
-      }} />
+      <Spinner size={40} borderWidth={4} color="#3498db" trackColor="#ecf0f1" />
       <p style={{ marginTop: '15px' }}>{text}</p>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

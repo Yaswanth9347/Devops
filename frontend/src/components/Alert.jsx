@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import Button from "./ui/Button";
 
 function Alert({ message, type = "success", onDismiss }) {
   const [visible, setVisible] = useState(true);
@@ -37,10 +38,18 @@ function Alert({ message, type = "success", onDismiss }) {
     }}>
       <span>{message}</span>
       {onDismiss && (
-        <button onClick={() => { setVisible(false); onDismiss(); }} style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          fontSize: '1.2em', color: style.color, padding: '0 0 0 15px'
-        }}>✕</button>
+        <Button
+          onClick={() => { setVisible(false); onDismiss(); }}
+          variant="muted"
+          style={{
+            background: 'none',
+            fontSize: '1.2em',
+            color: style.color,
+            padding: '0 0 0 15px'
+          }}
+        >
+          ✕
+        </Button>
       )}
     </div>
   );

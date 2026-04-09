@@ -1,19 +1,19 @@
 const STATUS_CONFIG = {
-  pending:   { bg: '#f39c12', label: '⏳ Pending' },
-  cloning:   { bg: '#3498db', label: '📥 Cloning' },
-  building:  { bg: '#9b59b6', label: '🔨 Building' },
-  deploying: { bg: '#1abc9c', label: '🚢 Deploying' },
-  running:   { bg: '#27ae60', label: '🟢 Running' },
-  failed:    { bg: '#e74c3c', label: '🔴 Failed' },
-  stopped:   { bg: '#7f8c8d', label: '⚫ Stopped' },
-  completed: { bg: '#27ae60', label: '✅ Completed' },
-  unknown:   { bg: '#95a5a6', label: '⚪ Unknown' },
+  pending:   { bg: '#b26a00', label: 'pending' },
+  cloning:   { bg: '#1565c0', label: 'cloning' },
+  building:  { bg: '#ed6c02', label: 'building' },
+  deploying: { bg: '#00897b', label: 'deploying' },
+  running:   { bg: '#2e7d32', label: 'running' },
+  failed:    { bg: '#c62828', label: 'failed' },
+  stopped:   { bg: '#6b7280', label: 'stopped' },
+  completed: { bg: '#2e7d32', label: 'completed' },
+  unknown:   { bg: '#757575', label: 'unknown' },
 };
 
 function StatusBadge({ status, size = "sm" }) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.unknown;
-  const padding = size === "lg" ? "6px 14px" : "3px 10px";
-  const fontSize = size === "lg" ? "0.9em" : "0.75em";
+  const padding = size === "lg" ? "6px 14px" : "4px 10px";
+  const fontSize = size === "lg" ? "0.8em" : "0.72em";
 
   return (
     <span style={{
@@ -22,12 +22,12 @@ function StatusBadge({ status, size = "sm" }) {
       padding,
       borderRadius: "20px",
       fontSize,
-      fontWeight: "600",
-      letterSpacing: "0.3px",
+      fontWeight: "700",
+      letterSpacing: "0.5px",
       display: "inline-block",
       whiteSpace: "nowrap"
     }}>
-      {cfg.label}
+      {cfg.label.toUpperCase()}
     </span>
   );
 }

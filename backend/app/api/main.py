@@ -109,6 +109,29 @@ def list_projects(
     } for p in projects]
     return success_response(prjs_data, "Projects listed successfully", len(projects))
 
+@app.delete("/projects/{project_id}")
+def delete_project(
+    project_id: int,
+    user_id: int = Depends(auth.get_current_user_id_or_default),
+    db: Session = Depends(get_db)
+):
+    project = db.query(models.Project).filter(
+        models.Project.id == project_id,
+        models.Project.owner_id == user_id
+    ).first()
+
+    if not project:
+        return JSONResponse(status_code=404, content=error_response("Project not found", 404))
+
+    deployments = crud.get_project_deployments(db, project_id)
+    for deployment in deployments:
+        cleanup_deployment(deployment)
+        db.delete(deployment)
+
+    db.delete(project)
+    db.commit()
+    return success_response(None, "Project deleted")
+
 @app.put("/projects/{project_id}/source")
 def update_source(
     project_id: int,
@@ -205,7 +228,7 @@ def create_deployment(
 @app.post("/deployments/{deployment_id}/redeploy")
 def redeploy(
     deployment_id: int,
-    user_id: int = Depends(auth.get_current_user),
+    user_id: int = Depends(auth.get_current_user_id_or_default),
     db: Session = Depends(get_db)
 ):
     old = crud.get_deployment(db, deployment_id)
@@ -564,7 +587,7 @@ def delete_deployment(
 @app.post("/deployments/{deployment_id}/retry")
 def retry_deployment(
     deployment_id: int,
-    user_id: int = Depends(auth.get_current_user),
+    user_id: int = Depends(auth.get_current_user_id_or_default),
     db: Session = Depends(get_db)
 ):
     deployment = crud.get_deployment(db, deployment_id)

@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { API_URL } from "../config";
 
 const navItems = [
   { to: "/", label: "📊 Dashboard", exact: true },
@@ -7,6 +8,14 @@ const navItems = [
 ];
 
 function Sidebar() {
+  const backendHost = (() => {
+    try {
+      return new URL(API_URL).host;
+    } catch {
+      return API_URL;
+    }
+  })();
+
   return (
     <div style={{
       width: "220px",
@@ -32,9 +41,9 @@ function Sidebar() {
 
       {/* Nav Links */}
       <nav style={{ padding: "16px 0", flex: 1 }}>
-        <p style={{ color: "#555", fontSize: "0.7em", padding: "0 20px 8px", textTransform: "uppercase", letterSpacing: "1px", margin: 0 }}>
-          Navigation
-        </p>
+        <h4 style={{ color: "#7f8aa3", fontSize: "0.72em", padding: "0 20px 8px", textTransform: "uppercase", letterSpacing: "1px", margin: 0, fontWeight: 700 }}>
+          Platform
+        </h4>
         {navItems.map(({ to, label, exact }) => (
           <NavLink
             key={to}
@@ -63,7 +72,7 @@ function Sidebar() {
         fontSize: "0.72em",
         color: "#555"
       }}>
-        Backend: <span style={{ color: "#1abc9c" }}>localhost:8001</span>
+        Backend: <span style={{ color: "#1abc9c" }}>{backendHost}</span>
       </div>
     </div>
   );

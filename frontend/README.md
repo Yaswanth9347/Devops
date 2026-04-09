@@ -1,16 +1,50 @@
-# React + Vite
+# DevDeploy Frontend (Vite + React)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Production-ready frontend for the DevDeploy platform.
 
-Currently, two official plugins are available:
+## Requirements
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Node.js 18+
+- npm 9+
 
-## React Compiler
+## Environment
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Copy `.env.example` to `.env` and set values as needed:
 
-## Expanding the ESLint configuration
+```bash
+cp .env.example .env
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Variables:
+
+- `VITE_API_URL` — Backend base URL (example: `http://127.0.0.1:8001`)
+- `VITE_APP_VERSION` — UI version label (example: `v1.0`)
+
+## Development
+
+```bash
+npm install
+npm run dev
+```
+
+## Production Build
+
+```bash
+npm run build
+```
+
+Build output is generated in `dist/`.
+
+## Production Preview (Static)
+
+```bash
+npm run preview -- --host 0.0.0.0 --port 4173
+```
+
+Then open `http://localhost:4173`.
+
+## Deployment Notes (Ubuntu / Docker)
+
+- Serve the `dist/` folder via Nginx or any static file server.
+- Set `VITE_API_URL` during build for target environment.
+- Keep frontend container/image stateless and immutable.
